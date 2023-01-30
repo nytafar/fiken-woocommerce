@@ -403,9 +403,9 @@ if (!class_exists('FikenSale')) {
                 // Hack - set the income account for products
                 // Accounts for different products should probably be made configurable
                 // or properly linked to actual Fiken products
-                //if ($line['vatType'] == FikenUtils::VAT_MEDIUM){
-                //    $line['incomeAccount'] = '3040';
-                // }
+                if ($line['vatType'] == FikenUtils::VAT_MEDIUM){
+                    $line['incomeAccount'] = '3040';
+                }
                 $lines[] = $line;
             }
 
@@ -457,7 +457,7 @@ if (!class_exists('FikenSale')) {
                         "description" => $shipping_item['name'],
                         "netPrice" => FikenUtils::moneyToCent($shipping_item['cost']),
                         "vat" => $shipVat,
-                        "incomeAccount" => "3090",
+                    //    "incomeAccount" => "3090",
                         "vatType" => (($shipVat > 0) && ($shipVatType == FikenUtils::VAT_NONE) ? FikenUtils::VAT_HIGH : $shipVatType)
                     );
                 }
