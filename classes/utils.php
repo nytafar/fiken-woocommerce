@@ -6,10 +6,12 @@ if (!class_exists('FikenUtils')) {
 
     class FikenUtils
     {
-        const FIKEN_VERSION = "1.17-MB-3";
+        const FIKEN_VERSION = "1.23";
 
         const ACC_FILTER = "/^19[26]0:/";
         const FIKEN_BASE_URL = "https://fiken.no/api/v1";
+
+        const INCOME_ACCOUNT_FEE = "7770";
 
         const EXTERNAL_INVOICE = "EXTERNAL_INVOICE";
         const CASH_SALE = "CASH_SALE";
@@ -38,6 +40,7 @@ if (!class_exists('FikenUtils')) {
         const CONF_FIKEN_COMPANY = 'fiken_v1_company';
         const CONF_FIKEN_PAY_METHODS = 'fiken_v1_pay_methods';
         const CONF_FIKEN_VATS_MAPPING = 'fiken_v1_vats_mapping';
+        const CONF_FIKEN_SHIPPING_METHODS = 'fiken_v1_shipping_methods';
         const CONF_FIKEN_PDF_INV = 'fiken_v1_pdf_inv';
         const CONF_FIKEN_DEBUG_MODE = 'fiken_v1_debug_mode';
 
@@ -45,6 +48,7 @@ if (!class_exists('FikenUtils')) {
         const CTRL_NAME_PAY_STATUS = 'fiken_pay_status_';
         const CTRL_NAME_SALE_KIND = 'fiken_sale_kind_';
         const CTRL_NAME_VAT = 'fiken_vat_';
+        const CTRL_NAME_SHIPPING = 'fiken_shipping_';
         const CTRL_NAME_LOGIN = 'fiken_login';
         const CTRL_NAME_PASSW = 'fiken_passw';
         const CTRL_NAME_COMPANY = 'fiken_company';
@@ -73,7 +77,7 @@ if (!class_exists('FikenUtils')) {
 			        $log->add('fiken', $title . ' :: ' . $mes);
 		        } else {
 			        $logger = wc_get_logger();
-			        $logger->log('debug', $title . ' :: ' . $mes, array( 'source' => 'fiken' ));
+			        $logger->log('debug', $mes, array( 'source' => 'fiken' ));
 		        }
 	        }
         }
@@ -97,7 +101,7 @@ if (!class_exists('FikenUtils')) {
             array_push($headers, 'User-Agent: ' . 'fiken/' . self::FIKEN_VERSION . ' woocommerce/' . WC_VERSION . ' wordpress/' . $wp_version);
             self::log($rel, 'CALL URI', self::LOG_LEVEL_INFO);
             if (isset($data) && $data) {
-                self::log($json ? json_encode($data) : var_export($data, true), 'CALL DATA', self::LOG_LEVEL_INFO);
+                self::log(json_encode($data), 'CALL DATA', self::LOG_LEVEL_INFO);
             }
 
             $ch = curl_init();
@@ -123,6 +127,7 @@ if (!class_exists('FikenUtils')) {
                 @curl_setopt($ch, CURLOPT_POSTFIELDS, $json ? json_encode($data) : $data);
             }
 
+
             $result = curl_exec($ch);
             $info = curl_getinfo($ch);
 
@@ -142,14 +147,9 @@ if (!class_exists('FikenUtils')) {
             $header = substr($result, 0, $info['header_size']);
             $body = substr($result, $info['header_size']);
 
-            $bodyLen = strlen($body);
-            $logbody = $body;
-            if ($bodyLen > 256){
-                $logbody = substr($body, 0, 256) . ' ... ';
-            }
 
             self::log($header, 'RESULT_HEADER', self::LOG_LEVEL_INFO);
-            self::log($logbody, 'RESULT_BODY', self::LOG_LEVEL_INFO);
+            self::log($body, 'RESULT_BODY', self::LOG_LEVEL_INFO);
 
             if (intval($info['http_code']) > 300) {
                 self::log($info['http_code'], 'HTTP status error code', self::LOG_LEVEL_ERROR);
@@ -165,10 +165,12 @@ if (!class_exists('FikenUtils')) {
         private static function getHeaderInfo($key, $header)
         {
             $res = '';
+            $key = strtolower($key);
             $header = explode("\n", $header);
             foreach ($header as $head) {
-                if (stripos($head, $key) !== false) {
-                    $res = trim(str_ireplace($key, '', $head));
+                $lowerHead = strtolower($head);
+                if (stripos($lowerHead, $key) !== false) {
+                    $res = trim(str_replace($key, '', $lowerHead));
                 }
             }
             return $res;
@@ -176,7 +178,8 @@ if (!class_exists('FikenUtils')) {
 
         public static function moneyToCent($value)
         {
-            return round($value * 100);
+            $dec = 2;
+            return intval(strval(round(floatval($value), $dec) * pow(10, $dec)));
         }
 
         public static function getStatesFromSettings()

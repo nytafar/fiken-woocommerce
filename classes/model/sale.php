@@ -203,7 +203,7 @@ if (!class_exists('FikenSale')) {
             $this->paymentDate = $paymentDate;
         }
 
-        /**
+                /**
          * @param $uri
          * @return FikenSale|bool
          */
@@ -305,7 +305,7 @@ if (!class_exists('FikenSale')) {
                 $status = isset($payMethodSettings->{$payM}->{FikenUtils::CTRL_NAME_PAY_STATUS}) ? $payMethodSettings->{$payM}->{FikenUtils::CTRL_NAME_PAY_STATUS} : false;
 
                 if (!$status) {
-                    throw new Exception(sprintf(__('Order status for payment module "%s" not set!', 'fiken'), $order->module));
+                    throw new Exception(sprintf(__('Order status for payment module "%s" not set!', 'fiken'), $payM));
                 }
 
                 if ($status === $wcOrderPostStatus) {
@@ -390,29 +390,22 @@ if (!class_exists('FikenSale')) {
             $sale->setDate(substr($wcOrderDate, 0, 10));
             $invNumber = FikenProvider::getInvoiceNumber($order);
             $sale->setIdentifier(!empty($invNumber) ? $invNumber :  $order->get_order_number());
-
+// Fiken no longer supports subtotal tax rounding, so this functionality is removed
             $lines = array();
             foreach ($order_products as $product) {
-
-                if ( 'yes' === get_option( 'woocommerce_tax_round_at_subtotal' ) ) {
-                    $netPrice = floatval($product['line_total']);
-                    $vat = floatval($product['line_tax']);
-                } else {
-                    $netPrice = wc_round_tax_total($product['line_total']);
-                    $vat = wc_round_tax_total($product['line_tax']);
-                }
-                $line = array(
+                $lines[] = array(
                     "description" => $product['qty'] . " x " . $product['name'],
-                    "netPrice" => $netPrice,
-                    "vat" => $vat,
+                    "netPrice" => FikenUtils::moneyToCent($product['line_total']),
+                    "vat" => FikenUtils::moneyToCent(($product['line_tax'])),
+                    //"incomeAccount" => "3000",
                     "vatType" => FikenProvider::getVatCode($product)
                 );
-                // Hack - all our medium VAT products are 'egentilvirkede'
+                // Hack - set the income account for products
                 // Accounts for different products should probably be made configurable
                 // or properly linked to actual Fiken products
-                if ($line['vatType'] == FikenUtils::VAT_MEDIUM){
-                    $line['incomeAccount'] = '3040';
-                }
+                //if ($line['vatType'] == FikenUtils::VAT_MEDIUM){
+                //    $line['incomeAccount'] = '3040';
+                // }
                 $lines[] = $line;
             }
 
@@ -449,8 +442,9 @@ if (!class_exists('FikenSale')) {
                                     $taxTotalValue = floatval($taxValue);
                                 }
 
-                                $shipVat = wc_round_tax_total($taxTotalValue);
-                                $shipVatType = FikenProvider::calculateVatCode($shipping_item['cost'], $taxTotalValue);
+                                $shipVat = FikenUtils::moneyToCent($taxTotalValue);
+                                $shipping_method_id = preg_replace('/:.*/', '', $shipping_item['method_id']);
+                                $shipVatType = FikenProvider::getVatCodeForShipping($shipping_method_id);
                                 /**
                                  * takes first not null tax
                                  */
@@ -461,9 +455,9 @@ if (!class_exists('FikenSale')) {
 
                     $lines[] = array(
                         "description" => $shipping_item['name'],
-                        "netPrice" => wc_round_tax_total($shipping_item['cost']),
+                        "netPrice" => FikenUtils::moneyToCent($shipping_item['cost']),
                         "vat" => $shipVat,
-                        // "incomeAccount" => "3090",
+                        "incomeAccount" => "3090",
                         "vatType" => (($shipVat > 0) && ($shipVatType == FikenUtils::VAT_NONE) ? FikenUtils::VAT_HIGH : $shipVatType)
                     );
                 }
@@ -472,28 +466,9 @@ if (!class_exists('FikenSale')) {
             /**
              * Shipping log
              */
-            FikenUtils::log(var_export($order->get_shipping_methods(), true), '\'Shipping debug: order shipping methods\'', FikenUtils::LOG_LEVEL_INFO);
+            FikenUtils::log(var_export($order->get_shipping_methods(), true), 'Shipping debug: order shipping methods', FikenUtils::LOG_LEVEL_INFO);
 
-            /**
-             * Fees
-             */
-            foreach ($order->get_fees() as $fee_item) {
-                if ($fee_item['total']) {
-                    $totalTax = wc_round_tax_total(floatval($fee_item['total_tax']));
-                    $lines[] = array(
-                        "description" => $fee_item['name'],
-                        "netPrice" => wc_round_tax_total($fee_item['total']),
-                        "vat" => $totalTax,
-                        "vatType" => ($totalTax > 0 ? FikenUtils::VAT_HIGH : FikenUtils::VAT_NONE)
-                    );
-                }
-            }
-
-            /**
-             * Fees log
-             */
-            FikenUtils::log(var_export($order->get_fees(), true), 'Fee debug: order fees', FikenUtils::LOG_LEVEL_INFO);
-            FikenUtils::log(var_export($lines, true), 'ORDER LINES', FikenUtils::LOG_LEVEL_INFO);
+            // Looks like fee and fee log functionality has been moved down since 1.17
 
             //check $sales["lines"] !=0
             if (FikenUtils::SKIP_EMPTY_PRICE && isset($lines)) {
@@ -511,9 +486,8 @@ if (!class_exists('FikenSale')) {
                 }
             }
 
-
             /**
-             * collapse lines
+             * lines pack
              */
             $packedLines = array(
                 FikenUtils::VAT_HIGH => array(),
@@ -533,7 +507,6 @@ if (!class_exists('FikenSale')) {
                     $packedLines[$line['vatType']]['vat'] = 0;
                     $packedLines[$line['vatType']]['vatType'] = $line['vatType'];
                 }
-                    
                 $packedLines[$line['vatType']]['netPrice'] += $line['netPrice'];
                 $packedLines[$line['vatType']]['vat'] += $line['vat'];
                 // Hack, should probably pack lines on account + vatType instead, or use proper product lines.
@@ -543,27 +516,38 @@ if (!class_exists('FikenSale')) {
             }
 
             /**
-             * clear packedLines
+             * clear packed Lines
              */
             $packedLines = array_filter($packedLines);
 
             /**
              * reset keys
              */
-            $packedLines = array_values($packedLines);
+            $lines = array_values($packedLines);
 
             FikenUtils::log(var_export($packedLines, true), 'PACKED LINES', FikenUtils::LOG_LEVEL_INFO);
+
             /**
-             * Convert all money values to fixed point
+             * Fees (should not be packed)
              */
-            $lines = array();
-            foreach ($packedLines as $line) {
-                $line['netPrice'] = FikenUtils::moneyToCent($line['netPrice']);
-                $line['vat'] = FikenUtils::moneyToCent($line['vat']);
-                array_push($lines, $line);
+            foreach ($order->get_fees() as $fee_item) {
+                if ($fee_item['total']) {
+                    $totalTax = FikenUtils::moneyToCent(floatval($fee_item['total_tax']));
+                    $lines[] = array(
+                        "description" => $fee_item['name'],
+                        "netPrice" => FikenUtils::moneyToCent($fee_item['total']),
+                        "vat" => $totalTax,
+                        "vatType" => ($totalTax > 0 ? FikenUtils::VAT_HIGH : FikenUtils::VAT_NONE),
+                        "incomeAccount" => FikenUtils::INCOME_ACCOUNT_FEE,
+                    );
+                }
             }
-            FikenUtils::log(var_export($lines, true), 'FIKEN LINES', FikenUtils::LOG_LEVEL_INFO);
-            
+
+            /**
+             * Fees log
+             */
+            FikenUtils::log(var_export($order->get_fees(), true), 'Fee debug: order fees', FikenUtils::LOG_LEVEL_INFO);
+
             $sale->setLines($lines);
             $sale->setKind($saleKind);
             $sale->setPaymentAccount($acc);
