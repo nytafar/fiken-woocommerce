@@ -123,15 +123,16 @@ if ( ! class_exists( 'FikenCompany' ) ) {
                         foreach ($companies as $comp) {
                             $links = $comp->getLinks();
                             $rSales = '';
-                            if (array_key_exists(FikenUtils::FIKEN_BASE_URL . "/rel/sales", $links) && $links[FikenUtils::FIKEN_BASE_URL . "/rel/sales"]) {
+                            // added (array) before array variables to ensure php 8+ compatibility
+                            if (array_key_exists(FikenUtils::FIKEN_BASE_URL . "/rel/sales", (array)$links) && (array)$links[FikenUtils::FIKEN_BASE_URL . "/rel/sales"]) {
                                 $rSales = $links[FikenUtils::FIKEN_BASE_URL . "/rel/sales"][0]->getUri();
                             }
                             $rAccounts = '';
-                            if (array_key_exists(FikenUtils::FIKEN_BASE_URL . "/rel/accounts", $links) && $links[FikenUtils::FIKEN_BASE_URL . "/rel/accounts"]) {
+                            if (array_key_exists(FikenUtils::FIKEN_BASE_URL . "/rel/accounts", (array)$links) && (array)$links[FikenUtils::FIKEN_BASE_URL . "/rel/accounts"]) {
                                 $rAccounts = $links[FikenUtils::FIKEN_BASE_URL . "/rel/accounts"][0]->getUri();
                             }
                             $rContacts = '';
-                            if (array_key_exists(FikenUtils::FIKEN_BASE_URL . "/rel/contacts", $links) && $links[FikenUtils::FIKEN_BASE_URL . "/rel/contacts"]) {
+                            if (array_key_exists(FikenUtils::FIKEN_BASE_URL . "/rel/contacts", (array)$links) && (array)$links[FikenUtils::FIKEN_BASE_URL . "/rel/contacts"]) {
                                 $rContacts = $links[FikenUtils::FIKEN_BASE_URL . "/rel/contacts"][0]->getUri();
                             }
                             $data = $comp->getData();
